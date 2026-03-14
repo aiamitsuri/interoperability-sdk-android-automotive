@@ -6,6 +6,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -21,68 +22,91 @@ class MainActivity : AppCompatActivity() {
     private lateinit var dataContainer: LinearLayout
     private lateinit var prevBtn: Button
     private lateinit var nextBtn: Button
+    private lateinit var loadingBar: ProgressBar
 
     private var currentPage = 1
-    private var totalPages = 1 // Dynamically updated from Rust metadata
+    private var totalPages = 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Root Layout: Black background (OLED friendly/AAOS standard)
+        // 1. Root Layout: Matches the full screen height
         val rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(Color.BLACK)
+            layoutParams = ViewGroup.LayoutParams(-1, -1) // Fill entire screen
             weightSum = 10f
         }
 
-        // --- LEFT PANEL: NAVIGATION (Touch optimized for car) ---
+        // --- LEFT PANEL: NAVIGATION (Pinned to top/center) ---
         val leftPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, -1, 3.5f)
-            setPadding(40, 50, 40, 40)
-            gravity = Gravity.CENTER_HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(0, -1, 3f) // Exactly 30% width
+            setPadding(30, 40, 30, 40)
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
         }
 
+        // 1. Heading
         leftPanel.addView(TextView(this).apply {
-            text = "RUST INTEROP"
+            text = "Interoperability FFI"
             setTextColor(Color.parseColor("#BB86FC"))
-            textSize = 24f
+            textSize = 40f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
         })
 
+        // 2. NEW TEXT (Between Heading and Page Indicator)
+        leftPanel.addView(TextView(this).apply {
+            text = "Rust + Android AAOS"
+            setTextColor(Color.GRAY)
+            textSize = 36f
+            typeface = Typeface.SANS_SERIF
+            setPadding(0, 5, 0, 10)
+            gravity = Gravity.CENTER
+        })
+
+        // 3. Page Indicator
         statusTv = TextView(this).apply {
-            text = "Initializing..."
+            text = "Page $currentPage"
             setTextColor(Color.LTGRAY)
             textSize = 18f
-            setPadding(0, 20, 0, 40)
+            setPadding(0, 0, 0, 10)
             gravity = Gravity.CENTER
         }
         leftPanel.addView(statusTv)
 
-        // Large 64dp+ buttons for "Fat Finger" safety
+        loadingBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            layoutParams = LinearLayout.LayoutParams(-1, 15).apply { setMargins(0, 0, 0, 10) }
+            visibility = View.INVISIBLE
+            isIndeterminate = true
+        }
+        leftPanel.addView(loadingBar)
+
         prevBtn = createNavButton("PREV")
         nextBtn = createNavButton("NEXT")
 
         leftPanel.addView(prevBtn)
-        leftPanel.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(1, 40) })
+        leftPanel.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(1, 20) })
         leftPanel.addView(nextBtn)
 
         rootLayout.addView(leftPanel)
 
-        // --- RIGHT PANEL: SCROLLABLE DATA ---
+        // --- RIGHT PANEL: SCROLLABLE DATA (Fills remaining 70%) ---
         val scrollView = ScrollView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(0, -1, 6.5f)
-            setPadding(20, 40, 40, 40)
+            layoutParams = LinearLayout.LayoutParams(0, -1, 7f)
+            setPadding(10, 40, 40, 40)
+            clipToPadding = false // Ensures top items aren't cut off
             isVerticalScrollBarEnabled = false
         }
-        dataContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        dataContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(-1, -2)
+        }
         scrollView.addView(dataContainer)
         rootLayout.addView(scrollView)
 
         setContentView(rootLayout)
 
-        // Click Listeners with Boundary Protection
         prevBtn.setOnClickListener { if (currentPage > 1) { currentPage--; loadData() } }
         nextBtn.setOnClickListener { if (currentPage < totalPages) { currentPage++; loadData() } }
 
@@ -91,51 +115,48 @@ class MainActivity : AppCompatActivity() {
 
     private fun createNavButton(label: String) = Button(this).apply {
         text = label
-        textSize = 20f
+        textSize = 18f
         typeface = Typeface.DEFAULT_BOLD
-        // Automotive standard: Large height for easy access
-        layoutParams = LinearLayout.LayoutParams(-1, 130)
+        // Fixed height for car accessibility (Approx 64dp)
+        layoutParams = LinearLayout.LayoutParams(-1, 110)
     }
 
     private fun loadData() {
-        // Clear UI and lock buttons while loading
-        dataContainer.removeAllViews()
         nextBtn.isEnabled = false
         prevBtn.isEnabled = false
-        statusTv.text = "Fetching P$currentPage..."
+        loadingBar.visibility = View.VISIBLE
+        statusTv.text = "Loading..."
 
         lifecycleScope.launch {
             try {
-                // RUN ON IO: Ensure Rust async call doesn't freeze the Head Unit UI
                 val result = withContext(Dispatchers.IO) {
                     val params = FilterParams(null, null, null, null, currentPage.toString(), null)
                     fetchInteroperability(params)
                 }
 
-                // READ METADATA: Update dynamic page limit
+                dataContainer.removeAllViews()
+
                 result.pagination?.let { meta ->
                     totalPages = meta.totalPages.toInt()
                 }
 
-                // Update Display Text
                 statusTv.text = "Page $currentPage of $totalPages"
 
-                // Apply Logic: Enable/Disable based on real data
                 prevBtn.isEnabled = currentPage > 1
                 nextBtn.isEnabled = currentPage < totalPages
-
-                // Visual feedback (Fading)
                 prevBtn.alpha = if (prevBtn.isEnabled) 1.0f else 0.3f
                 nextBtn.alpha = if (nextBtn.isEnabled) 1.0f else 0.3f
 
-                // Render List
                 result.data.forEach { item ->
                     dataContainer.addView(createDataCard(item))
                 }
 
             } catch (e: Exception) {
-                statusTv.text = "Error: Sync Failed"
-                android.util.Log.e("JNI_CAR", "Error: ${e.message}")
+                statusTv.text = "Sync Error"
+                prevBtn.isEnabled = currentPage > 1
+                nextBtn.isEnabled = (currentPage < totalPages)
+            } finally {
+                loadingBar.visibility = View.INVISIBLE
             }
         }
     }
@@ -143,25 +164,26 @@ class MainActivity : AppCompatActivity() {
     private fun createDataCard(item: Interoperability): View {
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(35, 30, 35, 30)
+            setPadding(30, 25, 30, 25)
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#1A1A1A"))
-                cornerRadius = 15f
+                cornerRadius = 12f
                 setStroke(2, Color.parseColor("#333333"))
             }
-            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, 25) }
+            // Ensure cards take up consistent space
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, 20) }
 
             addView(TextView(context).apply {
                 text = item.title
                 setTextColor(Color.WHITE)
-                textSize = 22f
+                textSize = 20f
                 typeface = Typeface.DEFAULT_BOLD
             })
             addView(TextView(context).apply {
                 text = "Language: ${item.language}"
                 setTextColor(Color.parseColor("#03DAC6"))
                 textSize = 16f
-                setPadding(0, 8, 0, 0)
+                setPadding(0, 5, 0, 0)
             })
         }
     }
