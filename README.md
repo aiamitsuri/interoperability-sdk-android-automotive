@@ -6,27 +6,29 @@ Run SDK
 
 Usage
 
+Usage
+
     import kotlinx.coroutines.Dispatchers
     import kotlinx.coroutines.withContext
-    import rust.interop.bridge.* // JNI/UniFFI generated code
+    import rust.interop.bridge.*
     
-    /**
-     * Pure logic to fetch data from the Rust bridge.
-     * Returns the response or throws an exception.
-     */
-    suspend fun fetchDataFromRust(page: Int): FilterResponse {
-        // 1. Prepare parameters
+    // Pure logic to fetch data from the Rust JNI bridge
+    suspend fun fetchDataFromRust(pageNumber: Int): FilterResponse {
+    
+        // 1. Create the params object
         val params = FilterParams(
-            null, null, null, null, 
-            page.toString(), 
-            null
+            language = null,
+            integration = null,
+            crates = null,
+            developmentkit = null,
+            page = pageNumber.toString(),
+            ids = null
         )
     
-        // 2. Switch to IO thread for the JNI/Rust call
+        // 2. Execute the call on the IO thread
         return withContext(Dispatchers.IO) {
-            // 3. Call the bridge function
             fetchInteroperability(params)
-        }
+        }        
     }
 
 Screenshot
