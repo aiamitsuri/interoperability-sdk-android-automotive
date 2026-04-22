@@ -8,23 +8,26 @@ Usage
 
     import kotlinx.coroutines.Dispatchers
     import kotlinx.coroutines.withContext
-    import rust.interop.bridge.*
+    import rust.interop.bridge.FilterParams
+    import rust.interop.bridge.FilterResponse
+    import rust.interop.bridge.fetchInteroperability
+    
+    val params = FilterParams(
+        integration = null,
+        developmentkit = null,
+        language = null,
+        crates = null,
+        page = "1",
+        ids = null
+    )
     
     suspend fun fetchDataFromRust(pageNumber: Int): FilterResponse {
-        val params = FilterParams(
-            language = null,
-            integration = null,
-            crates = null,
-            developmentkit = null,
-            page = pageNumber.toString(),
-            ids = null
-        )
-    
+        params.page = pageNumber.toString();
         return withContext(Dispatchers.IO) {
             fetchInteroperability(params)
-        }        
+        }
     }
-
+    
 Screenshot (Page 1)
 <img width="1080" height="600" alt="aaos1" src="https://github.com/user-attachments/assets/7b674202-bc4b-4e2b-a194-b60817b90660" />
 
