@@ -1,4 +1,4 @@
-# BHILANI Interop SDK Suite by kantini, chanchali
+Welcome to **BHILANI**, an **Agentic Interop SDK Suite** by **Kantini, Chanchali**
 
 Run SDK
 
@@ -10,10 +10,7 @@ Usage
     import kotlinx.coroutines.withContext
     import rust.interop.bridge.*
     
-    // Pure logic to fetch data from the Rust JNI bridge
     suspend fun fetchDataFromRust(pageNumber: Int): FilterResponse {
-    
-        // 1. Create the params object
         val params = FilterParams(
             language = null,
             integration = null,
@@ -23,7 +20,6 @@ Usage
             ids = null
         )
     
-        // 2. Execute the call on the IO thread
         return withContext(Dispatchers.IO) {
             fetchInteroperability(params)
         }        
